@@ -1,0 +1,46 @@
+name: Oppdater treningstider fra Excel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Treningstider 2026-27.xlsx'
+  workflow_dispatch: {}
+
+jobs:
+  oppdater:
+    runs-on: ubuntu-latest
+    # Denne linjen er godkjennings-steget: jobben stopper og venter på
+    # manuell godkjenning fra en "required reviewer" på dette environmentet
+    # (satt opp i repo-innstillingene) før den fortsetter.
+    environment: publiser-treningstider
+    permissions:
+      contents: write
+    steps:
+      - name: Sjekk ut repoet
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Sett opp Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer avhengigheter
+        run: npm install
+
+      - name: Bygg HTML-filen fra Excel-filen
+        run: npm run build
+
+      - name: Commit og push hvis noe er endret
+        run: |
+          git config user.name "treningstider-bot"
+          git config user.email "actions@github.com"
+          git add "Treningstider 2026-27.html"
+          if git diff --cached --quiet; then
+            echo "Ingen endringer i treningstidene."
+          else
+            git commit -m "Oppdater treningstider fra Excel-filen"
+            git push
+          fi
