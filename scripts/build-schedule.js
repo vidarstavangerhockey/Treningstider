@@ -322,8 +322,8 @@ function main() {
   const newViewsBlock = `const VIEWS = {\n${viewsEntries.join('\n')}\n};`;
   const newWeekDatesBlock = `const WEEK_DATES = {\n${weekDatesEntries.join('\n')}\n};`;
 
-  const viewsRe = /const VIEWS = \{[\s\S]*?\n\};/;
-  const weekDatesRe = /const WEEK_DATES = \{[\s\S]*?\n\};/;
+  const viewsRe = /const VIEWS = \{[\s\S]*?\n\s*\};/;
+  const weekDatesRe = /const WEEK_DATES = \{[\s\S]*?\n\s*\};/;
 
   if (!viewsRe.test(html)) {
     throw new Error('Fant ikke "const VIEWS = {...}" i HTML-filen - avbryter uten å skrive noe.');
