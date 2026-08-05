@@ -131,8 +131,10 @@ function parseHallSheet(sheet) {
           }
         }
 
-        // "F/S"-celler skal alltid vises som "Andre lag", uavhengig av farge.
+        // "F/S"-celler i Excel-filen skal vises som "Andre lag" på nettsiden,
+        // uavhengig av farge (selve Excel-filen beholder "F/S" uendret).
         if (/^f\/s$/i.test(team.trim())) {
+          team = 'Andre lag';
           cat = 'andrelag';
         }
 
