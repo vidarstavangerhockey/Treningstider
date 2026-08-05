@@ -485,5 +485,25 @@
     matchCountEl.textContent = value === 'ALL' ? '' : `${totalMatches} treningsøkt(er) funnet for ${value}`;
   }
 </script>
+  <script>
+    (function(){
+      function ttSendHeight(){
+        var h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        window.parent.postMessage({ttSchedule:true,height:h}, '*');
+      }
+      document.addEventListener('DOMContentLoaded', ttSendHeight);
+      window.addEventListener('load', function(){
+        ttSendHeight();
+        setTimeout(ttSendHeight, 300);
+        setTimeout(ttSendHeight, 1000);
+      });
+      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(ttSendHeight); }
+      window.addEventListener('resize', ttSendHeight);
+      document.addEventListener('click', function(){ setTimeout(ttSendHeight, 50); });
+      document.addEventListener('change', function(){ setTimeout(ttSendHeight, 50); });
+      if (window.ResizeObserver) { new ResizeObserver(ttSendHeight).observe(document.body); }
+      ttSendHeight();
+    })();
+  </script>
 </body>
 </html>
