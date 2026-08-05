@@ -429,6 +429,7 @@
   }
 
   function switchTab(view){
+    var previousTeamFilter = document.getElementById('teamFilter').value;
     activeView = view;
     DATA = VIEWS[view];
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -437,6 +438,11 @@
     updateWeekDates(view);
     renderRinks(DATA);
     rebuildTeamFilter(DATA);
+    var teamSelectEl = document.getElementById('teamFilter');
+    var stillExists = Array.prototype.some.call(teamSelectEl.options, function(opt){ return opt.value === previousTeamFilter; });
+    var restoredFilter = stillExists ? previousTeamFilter : 'ALL';
+    teamSelectEl.value = restoredFilter;
+    filterTeam(restoredFilter);
   }
 
   // Første rendering
