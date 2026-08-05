@@ -1,0 +1,12 @@
+{
+  "name": "treningstider-build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Genererer treningstider-HTML fra Excel-filen.",
+  "scripts": {
+    "build": "node scripts/build-schedule.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
