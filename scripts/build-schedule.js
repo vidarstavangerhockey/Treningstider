@@ -22,9 +22,9 @@ const COLOR_CAT = {
   'FFFF00': 'kunstlop',
   'FFE1CC': 'kamp',
   '777777': 'gray',
-  '999999': 'gray',
-  'ADADAD': 'gray',
-  'B7B7B7': 'gray',
+  '999999': 'publikumsskoyting',
+  'ADADAD': 'publikumsskoyting',
+  'B7B7B7': 'publikumsskoyting',
 };
 
 // Normaliserer hallnavn som skrives ulikt i ulike faner
@@ -116,11 +116,25 @@ function parseHallSheet(sheet) {
       rowMerges.forEach((m) => {
         const cell = sheet[XLSX.utils.encode_cell(m.s)];
         let team = cellText(cell);
-        if (!team) return;
 
         let cat = 'hockey';
         const rgb = cell.s && cell.s.fgColor ? cell.s.fgColor.rgb : null;
         if (rgb && COLOR_CAT[rgb]) cat = COLOR_CAT[rgb];
+
+        if (!team) {
+          // Tomme, lysegrå-fargede celler representerer publikumsskøyting
+          // (ingen lagnavn i Excel-arket, kun fargekoding).
+          if (cat === 'publikumsskoyting') {
+            team = 'Publikumsskøyting';
+          } else {
+            return;
+          }
+        }
+
+        // "F/S"-celler skal alltid vises som "Andre lag", uavhengig av farge.
+        if (/^f\/s$/i.test(team.trim())) {
+          cat = 'andrelag';
+        }
 
         const kampMatch = team.match(/^(.*)\s*-\s*kamp$/i);
         if (kampMatch) {
