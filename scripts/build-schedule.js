@@ -62,12 +62,20 @@ function cellText(cell) {
   return String(cell.v).trim();
 }
 
-function buildTimeMap() {
-  // Kolonne B (index 1) = 07:00, 15 min steg, til og med kolonne BJ (index 61) = 22:00
-  const map = {};
+function buildTimeMap(sheet) {
+  // Kolonne B er normalt 07:00, 15 min steg, til og med kolonne BJ = 22:00.
+  // Enkelte ark (oppdaget 2026-08-28, for å gi plass til en tidlig 06:45-økt) har fått
+  // satt inn en ekstra kolonne foran hele tidsgriddet, og har dermed én kolonne mer enn
+  // normalt (63 i stedet for 62, inkl. kolonne A). Vi oppdager dette ut fra arkets
+  // faktiske bredde i stedet for å anta et fast sluttpunkt, slik at kolonne B blir
+  // hhv. 07:00 (normalt) eller 06:45 (utvidet grid) — uten dette ville alle økter i et
+  // utvidet ark blitt registrert 15 minutter for sent.
+  const range = XLSX.utils.decode_range(sheet['!ref']);
   const startCol = XLSX.utils.decode_col('B');
-  const endCol = XLSX.utils.decode_col('BJ');
-  const startMinutes = 7 * 60;
+  const endCol = range.e.c;
+  const totalCols = endCol - range.s.c + 1;
+  const startMinutes = totalCols >= 63 ? 6 * 60 + 45 : 7 * 60;
+  const map = {};
   for (let col = startCol; col <= endCol; col++) {
     const mins = startMinutes + (col - startCol) * 15;
     const hh = Math.floor(mins / 60);
@@ -90,7 +98,7 @@ function addMinutes(hhmm, add) {
 
 // Parser en "hall-rutenett"-fane (Normalsesong, Uke 33-40).
 function parseHallSheet(sheet) {
-  const timeMap = buildTimeMap();
+  const timeMap = buildTimeMap(sheet);
   const range = XLSX.utils.decode_range(sheet['!ref']);
   const mergesByRow = {};
   (sheet['!merges'] || []).forEach((m) => {
