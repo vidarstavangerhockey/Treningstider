@@ -277,12 +277,14 @@ function parseWeekTitle(weekTitle) {
     d.setDate(d.getDate() + i);
     days[DAYS[i]] = pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1);
   }
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6);
 
   const range = startMonthIdx === endMonthIdx
     ? `${startDay}.–${endDay}. ${endMonthName} ${year}`
     : `${startDay}. ${startMonthNameRaw} – ${endDay}. ${endMonthName} ${year}`;
 
-  return { range, days };
+  return { range, days, endDate };
 }
 
 function sessionsToJsArray(sessions) {
@@ -296,58 +298,91 @@ function sessionsToJsArray(sessions) {
   return '[' + items.join(', ') + ']';
 }
 
+// Oppdager ark dynamisk i stedet for en hardkodet liste (fikset 2026-08-28 —
+// en hardkodet liste opp til "Uke 40" førte til at Uke 41-45 ble stille
+// hoppet over selv om de fantes i xlsx-en). Returnerer
+// { normalSheetName, ukeSheets: [{key, sheetName, nr}, ...] sortert stigende,
+//   styrkeromSheetName }.
+function discoverSheets(wb) {
+  const sheetNames = wb.SheetNames;
+  const normalSheetName = sheetNames.find((s) => s.startsWith('Normalsesong')) || null;
+  const ukeSheets = [];
+  sheetNames.forEach((s) => {
+    const m = s.trim().match(/^Uke\s+(\d+)$/);
+    if (m) {
+      const nr = Number(m[1]);
+      ukeSheets.push({ key: `uke${nr}`, sheetName: s, nr });
+    }
+  });
+  ukeSheets.sort((a, b) => a.nr - b.nr);
+  const styrkeromSheetName = sheetNames.find((s) => s.startsWith('Styrkerom')) || null;
+  return { normalSheetName, ukeSheets, styrkeromSheetName };
+}
+
 function main() {
   const wb = XLSX.readFile(XLSX_PATH, { cellStyles: true });
   let html = fs.readFileSync(HTML_PATH, 'utf8');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const viewsEntries = [];
   const weekDatesEntries = [];
+  const tabEntries = []; // {key, label} — normalsesong først, så uker, styrkerom sist
 
-  const sheetKeyMap = {
-    'Normalsesong 202627': 'normalsesong',
-    'Uke 33': 'uke33',
-    'Uke 34': 'uke34',
-    'Uke 35': 'uke35',
-    'Uke 36': 'uke36',
-    'Uke 37': 'uke37',
-    'Uke 38': 'uke38',
-    'Uke 39': 'uke39',
-    'Uke 40': 'uke40',
-  };
+  const { normalSheetName, ukeSheets, styrkeromSheetName } = discoverSheets(wb);
 
-  Object.keys(sheetKeyMap).forEach((sheetName) => {
-    const sheet = wb.Sheets[sheetName];
-    if (!sheet) {
-      console.warn(`Fant ikke fane "${sheetName}" - hopper over.`);
-      return;
+  if (normalSheetName) {
+    const { sessions } = parseHallSheet(wb.Sheets[normalSheetName]);
+    viewsEntries.push(`  normalsesong: ${sessionsToJsArray(sessions)},`);
+    tabEntries.push({ key: 'normalsesong', label: 'Istrening - Normalsesong' });
+  } else {
+    console.warn('Fant ikke noe Normalsesong-ark.');
+  }
+
+  const included = [];
+  const pruned = [];
+  ukeSheets.forEach(({ key, sheetName, nr }) => {
+    const { weekTitle, sessions } = parseHallSheet(wb.Sheets[sheetName]);
+    const parsed = weekTitle ? parseWeekTitle(weekTitle) : null;
+    if (parsed && parsed.endDate < today) {
+      pruned.push(`${key} (${parsed.range})`);
+      return; // uken er passert — fjern automatisk fra nettsiden (bekreftet med bruker 28.08.2026)
     }
-    const key = sheetKeyMap[sheetName];
-    const { weekTitle, sessions } = parseHallSheet(sheet);
     viewsEntries.push(`  ${key}: ${sessionsToJsArray(sessions)},`);
-
-    if (weekTitle) {
-      const parsed = parseWeekTitle(weekTitle);
-      if (parsed) {
-        weekDatesEntries.push(
-          `  ${key}: { range: ${JSON.stringify(parsed.range)}, days: { ${DAYS.map(
-            (d) => `${d}:${JSON.stringify(parsed.days[d])}`
-          ).join(', ')} } },`
-        );
-      }
+    tabEntries.push({ key, label: `Istrening - Uke ${nr}` });
+    included.push(key);
+    if (parsed) {
+      weekDatesEntries.push(
+        `  ${key}: { range: ${JSON.stringify(parsed.range)}, days: { ${DAYS.map(
+          (d) => `${d}:${JSON.stringify(parsed.days[d])}`
+        ).join(', ')} } },`
+      );
     }
   });
 
-  const styrkeromSheet = wb.Sheets['Styrkerom normalsesong'];
-  if (styrkeromSheet) {
-    const { sessions } = parseStyrkeromSheet(styrkeromSheet);
+  if (styrkeromSheetName) {
+    const { sessions } = parseStyrkeromSheet(wb.Sheets[styrkeromSheetName]);
     viewsEntries.push(`  styrkerom: ${sessionsToJsArray(sessions)},`);
+    tabEntries.push({ key: 'styrkerom', label: 'Styrkerom - Normalsesong' });
+  }
+
+  console.log(`Inkluderte uker: ${included.join(', ') || '(ingen)'}`);
+  if (pruned.length) {
+    console.log(`Fjernet (passert dato, ${today.toISOString().slice(0, 10)}): ${pruned.join(', ')}`);
   }
 
   const newViewsBlock = `const VIEWS = {\n${viewsEntries.join('\n')}\n};`;
   const newWeekDatesBlock = `const WEEK_DATES = {\n${weekDatesEntries.join('\n')}\n};`;
+  const newTabBar = `<div class="tab-bar" id="tabBar">\n${tabEntries
+    .map(
+      ({ key, label }, i) =>
+        `      <button type="button" class="tab-btn${i === 0 ? ' active' : ''}" data-view="${key}" onclick="switchTab('${key}')">${label}</button>`
+    )
+    .join('\n')}\n    </div>`;
 
   const viewsRe = /const VIEWS = \{[\s\S]*?\n\s*\};/;
   const weekDatesRe = /const WEEK_DATES = \{[\s\S]*?\n\s*\};/;
+  const tabBarRe = /<div class="tab-bar" id="tabBar">[\s\S]*?<\/div>/;
 
   if (!viewsRe.test(html)) {
     throw new Error('Fant ikke "const VIEWS = {...}" i HTML-filen - avbryter uten å skrive noe.');
@@ -355,9 +390,13 @@ function main() {
   if (!weekDatesRe.test(html)) {
     throw new Error('Fant ikke "const WEEK_DATES = {...}" i HTML-filen - avbryter uten å skrive noe.');
   }
+  if (!tabBarRe.test(html)) {
+    throw new Error('Fant ikke tab-bar-blokken i HTML-filen - avbryter uten å skrive noe.');
+  }
 
   html = html.replace(viewsRe, newViewsBlock);
   html = html.replace(weekDatesRe, newWeekDatesBlock);
+  html = html.replace(tabBarRe, newTabBar);
 
   fs.writeFileSync(HTML_PATH, html, 'utf8');
   console.log('HTML-filen er oppdatert fra Excel-filen.');
